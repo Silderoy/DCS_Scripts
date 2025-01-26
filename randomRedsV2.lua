@@ -10,7 +10,7 @@ Changelog:
 		Auto-recognition of editor groups based on name format so you don't have to give it all of the groups.
 
 improvements:
-	Auto creation of groups from random/defined bases of the coalition, with preset/custom unit types.
+	Auto-creation of groups from random/defined coalition bases, with preset/custom unit types.
 --]]
 
 local numAirborneJets = 0 -- Counter for active jets (or total active aircraft if not differentiating)
