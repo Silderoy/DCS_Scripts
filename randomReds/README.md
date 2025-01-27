@@ -1,7 +1,3 @@
- Hello everyone,
-
-I created a short script to address a need in my community, and I believe it can be useful for all of you MP mission makers.
-
 **Latest version**: 1.1 (27/01/2025)
 
 **What does it do:**
