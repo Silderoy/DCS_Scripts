@@ -78,7 +78,7 @@ This will enable real-time in-game messages with information about the script's 
   * Check airfield status and skip groups at destroyed airfields when choosing a group to activate.
 
 **Changelog:**
-* V1.1 (27/01/2025)
+* V1.2 (09/02/2025)
   * Added ability to run "randomReds" function more then once with seperate parameters, groups, and triggers.
   * Fixed multiple errors and bugs.
   * Improved error handling, robustness and efficiency.
