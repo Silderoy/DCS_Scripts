@@ -1,4 +1,4 @@
-**Latest version**: 1.1 (27/01/2025)
+**Latest version**: 1.2
 
 **What does it do:**
 
@@ -78,9 +78,14 @@ This will enable real-time in-game messages with information about the script's 
   * Check airfield status and skip groups at destroyed airfields when choosing a group to activate.
 
 **Changelog:**
-* V1.1
+* V1.1 (27/01/2025)
+  * Added ability to run "randomReds" function more then once with seperate parameters, groups, and triggers.
+  * Fixed multiple errors and bugs.
+  * Improved error handling, robustness and efficiency.
+
+* V1.1 (27/01/2025)
   * Added the option to activate the script on either coalition.
   * Added option to use a prefix for auto-recognition of editor groups based on name format so you don't have to give it all of the groups.
   * Added a check for combat ineffective units. Removes landed or retreating units (due to fuel, damage, ammo, tasks or anything else) from the count.
 
-Cheers! 
+Cheers!
