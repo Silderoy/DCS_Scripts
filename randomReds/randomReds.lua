@@ -1,31 +1,68 @@
 --[[
 Script created by Silderoy.
-Version: 1.1
+Version: 1.2
 Forum post: https://forum.dcs.world/topic/365777-dynamic-ai-interceptors-script/
 
 Changelog:
-	added:
-		check for combat ineffective units and remove landed or retreating units from the count.
-		The option to activate the script on either coalition.
-		Auto-recognition of editor groups based on name format so you don't have to give it all of the groups.
+	V1.2
+		Added ability to run "randomReds" function more then once with seperate parameters, groups, and triggers.
+		Fixed multiple errors and bugs.
+		Improved error handling, robustness and efficiency.
+	V1.1
+		Added check for combat ineffective units and remove landed or retreating units from the count.
+		Added option to activate the script on either coalition.
+		Added auto-recognition of editor groups based on name format so you don't have to give it all of the groups.
 
 improvements:
 	Auto creation of groups from random/defined bases of the coalition, with preset/custom unit types.
+	implementing a runway destroyed check and mechanism to allow for other aircraft to take off while those at the destroyed field are ignored until the field is fixed.
 --]]
+
+-- Default values
+local DEFAULT_RAND_MIN = 60 -- 1 minute
+local DEFAULT_RAND_MAX = 300 -- 5 minutes
+local DEFAULT_FIRST_SPAWN = 300 -- 5 minutes
+local checkInterval = 59
+local debug = false
+
+-- Main function
+function randomReds(groups, maxJets, maxHelicopters,firstSpawn, randMin, randMax)
 
 local numAirborneJets = 0 -- Counter for active jets (or total active aircraft if not differentiating)
 local numAirborneHelicopters = 0 -- Counter for active helicopters
 local activeUnits = {}
 local badGroups = {}
 local events = {}
-local debug = false
-removeFromList = {}
+local removeFromList = {}
+local CEC = {}
 
--- Default values
-local DEFAULT_RAND_MIN = 60 -- 1 minute
-local DEFAULT_RAND_MAX = 300 -- 5 minutes
-local DEFAULT_FIRST_SPAWN = 300 -- 5 minutes
-local checkInterval = 60
+function removeFromList:onEvent(event)
+	local id = event.id
+	if events[id] then
+		for i=#activeUnits,1,-1 do
+			local unit = activeUnits[i]
+			local name = unit:getName()
+			if unit == event.initiator then
+				if unit:getCategoryEx() == 1 then
+					numAirborneHelicopters = numAirborneHelicopters - 1
+				else
+					numAirborneJets = numAirborneJets - 1
+				end
+				table.remove(activeUnits,i)
+				if debug then
+					if event.id == 38 then
+						trigger.action.outText('RandomReds: '..name..' aborted mission', 10)
+					elseif (event.id == 4) or (event.id == 55) then
+						trigger.action.outText('RandomReds: '..name..' landed', 10)
+					elseif (event.id == 5) or (event.id == 6) or (event.id == 8) or (event.id == 30)or (event.id == 9) then
+						trigger.action.outText('RandomReds: '..name..' died', 10)
+					end
+					trigger.action.outText('RandomReds: There are '..numAirborneHelicopters..' Helicopters and '..numAirborneJets..' Jets airborne', 10)
+				end
+			end
+		end
+	end
+end
 
 local function make_set(array)
     local set = {}
@@ -35,14 +72,16 @@ local function make_set(array)
     return set
 end
 
-local function groupComp(group)
+local function groupComp(list)
 	local jetNum = 0
 	local HeloNum = 0
-	for i, unit in pairs(group:getUnits()) do
-        if unit:getCategoryEx() == 1 then
-			HeloNum = HeloNum + 1
-		else
-			jetNum = jetNum + 1
+	for i, unit in pairs(list) do
+		if unit and unit:isExist() then
+			if unit:getCategoryEx() == 1 then
+				HeloNum = HeloNum + 1
+			else
+				jetNum = jetNum + 1
+			end
 		end
 	end
 	return {jetNum, HeloNum}
@@ -51,36 +90,40 @@ end
 local function CombatEffective()
 	if debug then trigger.action.outText('RandomReds: checking combat effectiveness', 10) end
 	if #activeUnits > 0 then
-		for i,unit in pairs(activeUnits) do
+		for i=#activeUnits,1,-1 do
+			local unit = activeUnits[i]
 			local real = false
-			if unit then
+			if unit and unit:isExist() then
 				if not (unit:getController():hasTask() or unit:getGroup():getController():hasTask()) then
-					if debug then trigger.action.outText('RandomReds: '..unit:getName()..' has no task.', 10) end
-					real = true
+					table.remove(activeUnits,i)
+					if unit:getCategoryEx() == 1 then
+						numAirborneHelicopters = numAirborneHelicopters - 1
+					else
+						numAirborneJets = numAirborneJets - 1
+					end
+					if debug then trigger.action.outText('RandomReds: '..unit:getName()..' has no task\nThere are '..numAirborneHelicopters..' Helicopters and '..numAirborneJets..' Jets airborne', 10) end
 				else
 					if debug then trigger.action.outText('RandomReds: '..unit:getName()..' has a task.', 10) end
 				end
-			end
-			if real then
-				if unit:getCategoryEx() == 1 then
-					numAirborneHelicopters = numAirborneHelicopters - 1
-				else
-					numAirborneJets = numAirborneJets - 1
-				end
+			elseif unit then
 				table.remove(activeUnits,i)
-				if debug then trigger.action.outText('RandomReds: '..unit:getName()..' is retreating\nThere are '..numAirborneHelicopters..' Helicopters and '..numAirborneJets..' Jets airborne', 10) end
+				local updated = groupComp(activeUnits)
+				numAirborneHelicopters = updated[2]
+				numAirborneJets = updated[1]
+				if debug then trigger.action.outText('RandomReds: '..unit:getName()..' is missing.\nThere are '..numAirborneHelicopters..' Helicopters and '..numAirborneJets..' Jets airborne', 10) end
 			end
 		end
-		timer.scheduleFunction(function()
+		CEC = timer.scheduleFunction(function()
 			CombatEffective()
 			end,{}, timer.getTime() + checkInterval)
 	elseif #badGroups > 0 then
 		if debug then trigger.action.outText('RandomReds: No active units remaining but there are alert groups. skipping test.', 10) end
-		timer.scheduleFunction(function()
+		CEC = timer.scheduleFunction(function()
 			CombatEffective()
 			end,{}, timer.getTime() + checkInterval)
 	else
 		if debug then trigger.action.outText('RandomReds: No groups remaining, shutting down.', 10) end
+		env.info("RandomReds: No groups remaining, shutting down.")
 	end
 end
 
@@ -97,9 +140,9 @@ local function updateTables(actGroup, index)
 end
 
 -- Function to activate a group
-function activateGroup(group, maxJets, maxHelicopters, index, relative)
+local function activateGroup(group, maxJets, maxHelicopters, index, relative)
     if group and group:isExist() then
-		local comp = groupComp(group)
+		local comp = groupComp(group:getUnits())
 		if relative[1] ~= '' then
 			-- calculate amount of players online
 			local redPlayers = coalition.getPlayers(1)
@@ -139,7 +182,7 @@ function activateGroup(group, maxJets, maxHelicopters, index, relative)
 end
 
 -- Recursive function to schedule spawns
-function scheduleSpawn(badGroups, maxJets, maxHelicopters, randMin, randMax, relative)
+local function scheduleSpawn(badGroups, maxJets, maxHelicopters, randMin, randMax, relative)
     -- Check if there are groups left to activate
     if #badGroups > 0 then
 		if debug then trigger.action.outText('RandomReds: There are '..#badGroups..' groups on alert!', 10) end
@@ -160,40 +203,13 @@ function scheduleSpawn(badGroups, maxJets, maxHelicopters, randMin, randMax, rel
 			end, {}, timer.getTime() + nextInterval)
     else
 		world.removeEventHandler(removeFromList)
+		timer.removeFunction(CEC)
 		if debug then trigger.action.outText('RandomReds: No alert groups remaining!', 10) end
 		return
 	end
 end
 
-function removeFromList:onEvent(event)
-	local id = event.id
-	if events[id] then
-		for i,unit in pairs(activeUnits) do
-			local name = unit:getName()
-			if unit == event.initiator then
-				if unit:getCategoryEx() == 1 then
-					numAirborneHelicopters = numAirborneHelicopters - 1
-				else
-					numAirborneJets = numAirborneJets - 1
-				end
-				table.remove(activeUnits,i)
-				if debug then
-					if event.id == 38 then
-						trigger.action.outText('RandomReds: '..name..' aborted mission', 10)
-					elseif (event.id == 4) or (event.id == 55) then
-						trigger.action.outText('RandomReds: '..name..' landed', 10)
-					elseif (event.id == 5) or (event.id == 6) or (event.id == 8) or (event.id == 30)or (event.id == 9) then
-						trigger.action.outText('RandomReds: '..name..' died', 10)
-					end
-					trigger.action.outText('RandomReds: There are '..numAirborneHelicopters..' Helicopters and '..numAirborneJets..' Jets airborne', 10)
-				end
-			end
-		end
-	end
-end
 
--- Main function
-function randomReds(groups, maxJets, maxHelicopters,firstSpawn, randMin, randMax)
 	if debug then trigger.action.outText('RandomReds Called', 10) end
 	env.info("RandomReds Called")
 	-- Apply defaults
@@ -261,7 +277,7 @@ function randomReds(groups, maxJets, maxHelicopters,firstSpawn, randMin, randMax
 		if debug then trigger.action.outText('RandomReds: groups must be a non-empty table or a string', 10) end
 		return
 	end
-	if debug then trigger.action.outText('Number of groups: '..#groups..'\nmaxJets = '..maxJets..'\nmaxHelicopters = '..maxHelicopters..'\nFirst spawn in = '..firstSpawn..'\nMin interval = '..randMin..'\nMax interval = '..randMax, 20) end
+	if debug then trigger.action.outText('Number of groups: '..#badGroups..'\nmaxJets = '..maxJets..'\nmaxHelicopters = '..maxHelicopters..'\nFirst spawn in = '..firstSpawn..'\nMin interval = '..randMin..'\nMax interval = '..randMax, 20) end
 	
 	-- Start the spawning process
 	timer.scheduleFunction(function()
@@ -270,8 +286,11 @@ function randomReds(groups, maxJets, maxHelicopters,firstSpawn, randMin, randMax
 		
 	-- Start checking combat effectiveness
 	events = make_set{4, 5, 6, 8, 30, 38, 55, 9}
+	if removeFromList then
+		world.removeEventHandler(removeFromList)
+	end
 	world.addEventHandler(removeFromList)
-	timer.scheduleFunction(function()
+	CEC = timer.scheduleFunction(function()
 		CombatEffective()
 		end,{}, timer.getTime() + checkInterval)
 end
